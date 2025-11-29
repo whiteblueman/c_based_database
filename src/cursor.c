@@ -50,6 +50,24 @@ Cursor *table_end(Table *table) {
   return cursor;
 }
 
+Cursor *table_find(Table *table, uint32_t key) {
+  uint32_t root_page_num = table->root_page_num;
+  void *root_node = get_page(table->pager, root_page_num);
+
+  if (get_node_type(root_node) == NODE_LEAF) {
+    return leaf_node_find(table, root_page_num, key);
+  } else {
+    uint32_t page_num = root_page_num;
+    void *node = root_node;
+    while (get_node_type(node) == NODE_INTERNAL) {
+      uint32_t child_index = internal_node_find_child(node, key);
+      page_num = *internal_node_child(node, child_index);
+      node = get_page(table->pager, page_num);
+    }
+    return leaf_node_find(table, page_num, key);
+  }
+}
+
 void *cursor_value(Cursor *cursor) {
   uint32_t page_num = cursor->page_num;
   void *page = get_page(cursor->table->pager, page_num);

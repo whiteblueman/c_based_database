@@ -89,6 +89,7 @@ void *leaf_node_value(void *node, uint32_t cell_num);
 
 typedef struct Cursor Cursor;
 void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value);
+Cursor *leaf_node_find(Table *table, uint32_t page_num, uint32_t key);
 void internal_node_insert(Table *table, uint32_t parent_page_num,
                           uint32_t child_page_num);
 void internal_node_split_and_insert(Table *table, uint32_t parent_page_num,
