@@ -22,6 +22,10 @@ typedef enum { STATEMENT_INSERT, STATEMENT_SELECT } StatementType;
 typedef struct {
   StatementType type;
   Row row_to_insert;
+  char where_column[32];
+  char where_operator[3];
+  char where_value[255];
+  int has_where;
 } Statement;
 
 typedef struct Table Table;

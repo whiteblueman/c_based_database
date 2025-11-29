@@ -25,8 +25,21 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
     }
     return PREPARE_SUCCESS;
   }
-  if (strcmp(input_buffer->buffer, "select") == 0) {
+  if (strncmp(input_buffer->buffer, "select", 6) == 0) {
     statement->type = STATEMENT_SELECT;
+    statement->has_where = 0;
+
+    char *where_ptr = strstr(input_buffer->buffer, "where");
+    if (where_ptr != NULL) {
+      int args_assigned =
+          sscanf(where_ptr, "where %s %s %s", statement->where_column,
+                 statement->where_operator, statement->where_value);
+      if (args_assigned == 3) {
+        statement->has_where = 1;
+      } else {
+        return PREPARE_SYNTAX_ERROR;
+      }
+    }
     return PREPARE_SUCCESS;
   }
 

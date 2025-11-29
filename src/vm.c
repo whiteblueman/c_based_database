@@ -4,6 +4,7 @@
 #include "table.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 ExecuteResult execute_insert(Statement *statement, Table *table) {
 
@@ -24,7 +25,25 @@ ExecuteResult execute_select(Statement *statement, Table *table) {
   Row row;
   while (!(cursor->end_of_table)) {
     deserialize_row(cursor_value(cursor), &row);
-    printf("(%d, %s, %s)\n", row.id, row.username, row.email);
+
+    int match = 1;
+    if (statement->has_where) {
+      if (strcmp(statement->where_column, "id") == 0) {
+        uint32_t id = (uint32_t)atoi(statement->where_value);
+        if (row.id != id)
+          match = 0;
+      } else if (strcmp(statement->where_column, "username") == 0) {
+        if (strcmp(row.username, statement->where_value) != 0)
+          match = 0;
+      } else if (strcmp(statement->where_column, "email") == 0) {
+        if (strcmp(row.email, statement->where_value) != 0)
+          match = 0;
+      }
+    }
+
+    if (match) {
+      printf("(%d, %s, %s)\n", row.id, row.username, row.email);
+    }
     cursor_advance(cursor);
   }
   free(cursor);
