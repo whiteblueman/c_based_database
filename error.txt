@@ -1,5 +1,33 @@
-Splitting. Old page: 0. New page: 1
+table_end found leaf page 0
+Inserted key 1 at page 0 cell 0. Total cells: 1
+table_end found leaf page 0
+Inserted key 2 at page 0 cell 1. Total cells: 2
+table_end found leaf page 0
+Inserted key 3 at page 0 cell 2. Total cells: 3
+table_end found leaf page 0
+Inserted key 4 at page 0 cell 3. Total cells: 4
+table_end found leaf page 0
+Inserted key 5 at page 0 cell 4. Total cells: 5
+table_end found leaf page 0
+Inserted key 6 at page 0 cell 5. Total cells: 6
+table_end found leaf page 0
+Inserted key 7 at page 0 cell 6. Total cells: 7
+table_end found leaf page 0
+Inserted key 8 at page 0 cell 7. Total cells: 8
+table_end found leaf page 0
+Inserted key 9 at page 0 cell 8. Total cells: 9
+table_end found leaf page 0
+Inserted key 10 at page 0 cell 9. Total cells: 10
+table_end found leaf page 0
+Inserted key 11 at page 0 cell 10. Total cells: 11
+table_end found leaf page 0
+Inserted key 12 at page 0 cell 11. Total cells: 12
+table_end found leaf page 0
+Inserted key 13 at page 0 cell 12. Total cells: 13
+table_end found leaf page 0
 Creating new root. Left child page: 2
+table_end found leaf page 1
+Inserted key 15 at page 1 cell 8. Total cells: 9
 Advancing cursor. Page: 2. Cell: 1. Num cells: 6
 Advancing cursor. Page: 2. Cell: 2. Num cells: 6
 Advancing cursor. Page: 2. Cell: 3. Num cells: 6
@@ -7,12 +35,13 @@ Advancing cursor. Page: 2. Cell: 4. Num cells: 6
 Advancing cursor. Page: 2. Cell: 5. Num cells: 6
 Advancing cursor. Page: 2. Cell: 6. Num cells: 6
 End of page 2. Next page: 1
-Advancing cursor. Page: 1. Cell: 1. Num cells: 8
-Advancing cursor. Page: 1. Cell: 2. Num cells: 8
-Advancing cursor. Page: 1. Cell: 3. Num cells: 8
-Advancing cursor. Page: 1. Cell: 4. Num cells: 8
-Advancing cursor. Page: 1. Cell: 5. Num cells: 8
-Advancing cursor. Page: 1. Cell: 6. Num cells: 8
-Advancing cursor. Page: 1. Cell: 7. Num cells: 8
-Advancing cursor. Page: 1. Cell: 8. Num cells: 8
+Advancing cursor. Page: 1. Cell: 1. Num cells: 9
+Advancing cursor. Page: 1. Cell: 2. Num cells: 9
+Advancing cursor. Page: 1. Cell: 3. Num cells: 9
+Advancing cursor. Page: 1. Cell: 4. Num cells: 9
+Advancing cursor. Page: 1. Cell: 5. Num cells: 9
+Advancing cursor. Page: 1. Cell: 6. Num cells: 9
+Advancing cursor. Page: 1. Cell: 7. Num cells: 9
+Advancing cursor. Page: 1. Cell: 8. Num cells: 9
+Advancing cursor. Page: 1. Cell: 9. Num cells: 9
 End of page 1. Next page: 0

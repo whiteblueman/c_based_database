@@ -134,8 +134,6 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
       get_page(cursor->table->pager, 0); // Assuming root split for now
 
   uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
-  fprintf(stderr, "Splitting. Old page: %d. New page: %d\n",
-          cursor->table->root_page_num, new_page_num);
   void *new_node = get_page(cursor->table->pager, new_page_num);
   initialize_leaf_node(new_node);
   set_node_root(new_node, false);
@@ -147,12 +145,14 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
   */
   for (int32_t i = LEAF_NODE_MAX_CELLS; i >= 0; i--) {
     void *destination_node;
+    uint32_t index_within_node;
     if ((uint32_t)i >= LEAF_NODE_MAX_CELLS / 2) {
       destination_node = new_node;
+      index_within_node = i - (LEAF_NODE_MAX_CELLS / 2);
     } else {
       destination_node = old_node;
+      index_within_node = i;
     }
-    uint32_t index_within_node = i % (LEAF_NODE_MAX_CELLS / 2);
     void *destination = leaf_node_cell(destination_node, index_within_node);
 
     if ((uint32_t)i == cursor->cell_num) {
@@ -181,7 +181,7 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
 }
 
 void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value) {
-  void *node = get_page(cursor->table->pager, 0); // Assuming root is page 0
+  void *node = get_page(cursor->table->pager, cursor->page_num);
 
   uint32_t num_cells = *leaf_node_num_cells(node);
   if (num_cells >= LEAF_NODE_MAX_CELLS) {

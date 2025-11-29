@@ -25,7 +25,8 @@ db > (1, user1, person1@example.com)
 (10, user10, person10@example.com)
 (11, user11, person11@example.com)
 (12, user12, person12@example.com)
-(0, , )
-(0, , )
+(13, user13, person13@example.com)
+(14, user14, person14@example.com)
+(15, user15, person15@example.com)
 Executed.
 db > 
