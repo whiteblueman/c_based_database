@@ -1,5 +1,6 @@
 #include "cursor.h"
 #include "node.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 Cursor *table_start(Table *table) {
@@ -32,9 +33,18 @@ Cursor *table_start(Table *table) {
 Cursor *table_end(Table *table) {
   Cursor *cursor = malloc(sizeof(Cursor));
   cursor->table = table;
-  cursor->page_num =
-      table->root_page_num; // Not strictly correct but sufficient for now
-  cursor->cell_num = 0;
+  cursor->page_num = table->root_page_num;
+
+  void *root_node = get_page(table->pager, table->root_page_num);
+
+  while (get_node_type(root_node) == NODE_INTERNAL) {
+    uint32_t right_child_page_num = *internal_node_right_child(root_node);
+    cursor->page_num = right_child_page_num;
+    root_node = get_page(table->pager, right_child_page_num);
+  }
+
+  uint32_t num_cells = *leaf_node_num_cells(root_node);
+  cursor->cell_num = num_cells;
   cursor->end_of_table = true;
 
   return cursor;

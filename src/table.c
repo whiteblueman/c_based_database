@@ -32,7 +32,6 @@ void db_close(Table *table) {
 
   for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
     if (pager->pages[i]) {
-      fprintf(stderr, "Flushing page %d\n", i);
       pager_flush(pager, i, PAGE_SIZE);
       free(pager->pages[i]);
       pager->pages[i] = NULL;

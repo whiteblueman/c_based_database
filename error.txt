@@ -1,0 +1,18 @@
+Splitting. Old page: 0. New page: 1
+Creating new root. Left child page: 2
+Advancing cursor. Page: 2. Cell: 1. Num cells: 6
+Advancing cursor. Page: 2. Cell: 2. Num cells: 6
+Advancing cursor. Page: 2. Cell: 3. Num cells: 6
+Advancing cursor. Page: 2. Cell: 4. Num cells: 6
+Advancing cursor. Page: 2. Cell: 5. Num cells: 6
+Advancing cursor. Page: 2. Cell: 6. Num cells: 6
+End of page 2. Next page: 1
+Advancing cursor. Page: 1. Cell: 1. Num cells: 8
+Advancing cursor. Page: 1. Cell: 2. Num cells: 8
+Advancing cursor. Page: 1. Cell: 3. Num cells: 8
+Advancing cursor. Page: 1. Cell: 4. Num cells: 8
+Advancing cursor. Page: 1. Cell: 5. Num cells: 8
+Advancing cursor. Page: 1. Cell: 6. Num cells: 8
+Advancing cursor. Page: 1. Cell: 7. Num cells: 8
+Advancing cursor. Page: 1. Cell: 8. Num cells: 8
+End of page 1. Next page: 0

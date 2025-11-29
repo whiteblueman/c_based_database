@@ -68,8 +68,6 @@ void *get_page(Pager *pager, uint32_t page_num) {
     }
   }
 
-  fprintf(stderr, "get_page: %d. num_pages: %d. pages[%d]: %p\n", page_num,
-          pager->num_pages, page_num, pager->pages[page_num]);
   return pager->pages[page_num];
 }
 
