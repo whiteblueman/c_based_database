@@ -17,7 +17,11 @@ typedef enum {
   PREPARE_SYNTAX_ERROR
 } PrepareResult;
 
-typedef enum { STATEMENT_INSERT, STATEMENT_SELECT } StatementType;
+typedef enum {
+  STATEMENT_INSERT,
+  STATEMENT_SELECT,
+  STATEMENT_DELETE
+} StatementType;
 
 typedef struct {
   StatementType type;

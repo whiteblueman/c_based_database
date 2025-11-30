@@ -253,6 +253,28 @@ void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value) {
   serialize_row(value, leaf_node_value(node, cursor->cell_num));
 }
 
+void leaf_node_delete(Cursor *cursor, uint32_t key) {
+  void *node = get_page(cursor->table->pager, cursor->page_num);
+  uint32_t num_cells = *leaf_node_num_cells(node);
+
+  if (cursor->cell_num >= num_cells) {
+    return; // Cell not found or invalid cursor
+  }
+
+  uint32_t key_at_index = *leaf_node_key(node, cursor->cell_num);
+  if (key_at_index != key) {
+    return; // Key mismatch
+  }
+
+  // Shift cells left
+  for (uint32_t i = cursor->cell_num; i < num_cells - 1; i++) {
+    memcpy(leaf_node_cell(node, i), leaf_node_cell(node, i + 1),
+           LEAF_NODE_CELL_SIZE);
+  }
+
+  *(leaf_node_num_cells(node)) -= 1;
+}
+
 void internal_node_insert(Table *table, uint32_t parent_page_num,
                           uint32_t child_page_num) {
   /*

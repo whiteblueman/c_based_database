@@ -1,0 +1,21 @@
+db > Executed.
+db > Executed.
+db > Executed.
+db > Executed.
+db > (1, user1, person1@example.com)
+(2, user2, person2@example.com)
+(3, user3, person3@example.com)
+(4, user4, person4@example.com)
+Executed.
+db > Deleted row with id 1
+Executed.
+db > (2, user2, person2@example.com)
+(3, user3, person3@example.com)
+(4, user4, person4@example.com)
+Executed.
+db > Deleted row with id 3
+Executed.
+db > (2, user2, person2@example.com)
+(4, user4, person4@example.com)
+Executed.
+db > 
