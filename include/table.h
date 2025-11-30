@@ -3,6 +3,7 @@
 
 #include "pager.h"
 #include "row.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 #define PAGE_SIZE 4096
@@ -13,6 +14,7 @@ typedef struct Table {
   uint32_t main_root_page_num;
   uint32_t index_root_page_num;
   uint32_t orders_root_page_num;
+  bool in_transaction;
 } Table;
 
 extern const uint32_t ROWS_PER_PAGE;

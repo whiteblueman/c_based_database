@@ -310,6 +310,54 @@ ExecuteResult execute_insert_select(Statement *statement, Table *table) {
   return EXECUTE_SUCCESS;
 }
 
+ExecuteResult execute_begin(Statement *statement, Table *table) {
+  if (table->in_transaction) {
+    printf("Error: Already in a transaction\n");
+    return EXECUTE_SUCCESS; // Or error?
+  }
+  table->in_transaction = true;
+  printf("Transaction started.\n");
+  return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_commit(Statement *statement, Table *table) {
+  if (!table->in_transaction) {
+    printf("Error: Not in a transaction\n");
+    return EXECUTE_SUCCESS;
+  }
+
+  // Flush all pages to disk
+  for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
+    if (table->pager->pages[i] != NULL) {
+      pager_flush(table->pager, i, PAGE_SIZE);
+    }
+  }
+
+  table->in_transaction = false;
+  printf("Transaction committed.\n");
+  return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_rollback(Statement *statement, Table *table) {
+  if (!table->in_transaction) {
+    printf("Error: Not in a transaction\n");
+    return EXECUTE_SUCCESS;
+  }
+
+  pager_rollback(table->pager);
+
+  // We need to reload root pages because pointers might be invalid
+  // But get_page handles reloading.
+  // However, table->main_root_page_num etc are just numbers.
+  // The actual pointers in Cursors might be invalid if we had open cursors?
+  // VM executes one statement at a time, so no open cursors across statements
+  // usually.
+
+  table->in_transaction = false;
+  printf("Transaction rolled back.\n");
+  return EXECUTE_SUCCESS;
+}
+
 ExecuteResult execute_statement(Statement *statement, Table *table) {
   switch (statement->type) {
   case STATEMENT_INSERT:
@@ -320,6 +368,12 @@ ExecuteResult execute_statement(Statement *statement, Table *table) {
     return execute_delete(statement, table);
   case STATEMENT_INSERT_SELECT:
     return execute_insert_select(statement, table);
+  case STATEMENT_BEGIN:
+    return execute_begin(statement, table);
+  case STATEMENT_COMMIT:
+    return execute_commit(statement, table);
+  case STATEMENT_ROLLBACK:
+    return execute_rollback(statement, table);
   }
   return EXECUTE_SUCCESS;
 }

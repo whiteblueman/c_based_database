@@ -154,5 +154,18 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
     return PREPARE_SUCCESS;
   }
 
+  if (strncmp(input_buffer->buffer, "begin", 5) == 0) {
+    statement->type = STATEMENT_BEGIN;
+    return PREPARE_SUCCESS;
+  }
+  if (strncmp(input_buffer->buffer, "commit", 6) == 0) {
+    statement->type = STATEMENT_COMMIT;
+    return PREPARE_SUCCESS;
+  }
+  if (strncmp(input_buffer->buffer, "rollback", 8) == 0) {
+    statement->type = STATEMENT_ROLLBACK;
+    return PREPARE_SUCCESS;
+  }
+
   return PREPARE_UNRECOGNIZED_STATEMENT;
 }

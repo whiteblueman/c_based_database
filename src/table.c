@@ -42,6 +42,12 @@ Table *db_open(const char *filename) {
     table->main_root_page_num = 1;
     table->index_root_page_num = 2;
     table->orders_root_page_num = 3;
+
+    // Flush these pages to disk so we have a valid base state for Rollback
+    pager_flush(pager, 0, PAGE_SIZE);
+    pager_flush(pager, 1, PAGE_SIZE);
+    pager_flush(pager, 2, PAGE_SIZE);
+    pager_flush(pager, 3, PAGE_SIZE);
   } else {
     // Existing database
     void *meta_page = get_page(pager, 0);

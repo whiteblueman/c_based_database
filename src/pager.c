@@ -93,4 +93,20 @@ void pager_flush(Pager *pager, uint32_t page_num, uint32_t size) {
   }
 }
 
+void pager_rollback(Pager *pager) {
+  // Discard all cached pages
+  for (uint32_t i = 0; i < TABLE_MAX_PAGES; i++) {
+    if (pager->pages[i] != NULL) {
+      free(pager->pages[i]);
+      pager->pages[i] = NULL;
+    }
+  }
+
+  // Reset file length to actual file size on disk
+  // This handles case where we extended file in memory but didn't flush
+  off_t file_length = lseek(pager->file_descriptor, 0, SEEK_END);
+  pager->file_length = file_length;
+  pager->num_pages = (file_length / PAGE_SIZE);
+}
+
 uint32_t get_unused_page_num(Pager *pager) { return pager->num_pages; }
