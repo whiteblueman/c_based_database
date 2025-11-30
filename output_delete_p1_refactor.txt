@@ -1,0 +1,6 @@
+db > Executed.
+db > Executed.
+db > Executed.
+db > Deleted row with id 2
+Executed.
+db > 

@@ -10,7 +10,9 @@
 typedef struct Table {
   uint32_t num_rows;
   Pager *pager;
-  uint32_t root_page_num;
+  uint32_t main_root_page_num;
+  uint32_t index_root_page_num;
+  uint32_t orders_root_page_num;
 } Table;
 
 extern const uint32_t ROWS_PER_PAGE;

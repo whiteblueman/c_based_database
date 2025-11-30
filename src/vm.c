@@ -6,63 +6,179 @@
 #include <stdlib.h>
 #include <string.h>
 
+void serialize_order_row(OrderRow *source, void *destination) {
+  memcpy((char *)destination + ORDER_ID_OFFSET, &(source->id), ORDER_ID_SIZE);
+  memcpy((char *)destination + ORDER_USER_ID_OFFSET, &(source->user_id),
+         ORDER_USER_ID_SIZE);
+  memcpy((char *)destination + ORDER_PRODUCT_NAME_OFFSET,
+         &(source->product_name), ORDER_PRODUCT_NAME_SIZE);
+}
+
+void deserialize_order_row(void *source, OrderRow *destination) {
+  memcpy(&(destination->id), (char *)source + ORDER_ID_OFFSET, ORDER_ID_SIZE);
+  memcpy(&(destination->user_id), (char *)source + ORDER_USER_ID_OFFSET,
+         ORDER_USER_ID_SIZE);
+  memcpy(&(destination->product_name),
+         (char *)source + ORDER_PRODUCT_NAME_OFFSET, ORDER_PRODUCT_NAME_SIZE);
+}
+
 ExecuteResult execute_insert(Statement *statement, Table *table) {
+  if (strcmp(statement->table_name, "orders") == 0) {
+    void *node = get_page(table->pager, table->orders_root_page_num);
+    uint32_t num_cells =
+        *leaf_node_num_cells(node); // Assuming root is leaf for now
 
-  Row *row_to_insert = &(statement->row_to_insert);
-  Cursor *cursor = table_end(table);
+    Cursor *cursor = table_end(table, table->orders_root_page_num);
 
-  // For now, we just append to the end.
-  // In a real B-Tree, we would search for the correct position.
-  leaf_node_insert(cursor, row_to_insert->id, row_to_insert);
+    // We need to define leaf_node_insert for orders?
+    // leaf_node_insert is generic but takes key_size and value_size.
+    // For orders: key is ID (int), value is user_id + product_name?
+    // Or just store full row as value?
+    // Let's assume Key = ID, Value = Row (like users).
 
-  free(cursor);
+    leaf_node_insert(cursor, &(statement->order_to_insert.id), sizeof(uint32_t),
+                     &(statement->order_to_insert), sizeof(OrderRow), KEY_INT);
 
-  return EXECUTE_SUCCESS;
+    free(cursor);
+    return EXECUTE_SUCCESS;
+  } else {
+    // Users table
+    void *node = get_page(table->pager, table->main_root_page_num);
+    uint32_t num_cells = *leaf_node_num_cells(node);
+
+    Cursor *cursor = table_end(table, table->main_root_page_num);
+
+    leaf_node_insert(cursor, &(statement->row_to_insert.id),
+                     MAIN_TABLE_KEY_SIZE, &(statement->row_to_insert),
+                     MAIN_TABLE_VALUE_SIZE, KEY_INT);
+
+    // Insert into Secondary Index
+    Cursor *index_cursor = table_find(table, table->index_root_page_num,
+                                      statement->row_to_insert.username,
+                                      USERNAME_INDEX_KEY_SIZE, KEY_STRING);
+
+    // Check for duplicates? For now, just insert.
+    leaf_node_insert(index_cursor, statement->row_to_insert.username,
+                     USERNAME_INDEX_KEY_SIZE, &(statement->row_to_insert.id),
+                     USERNAME_INDEX_VALUE_SIZE, KEY_STRING);
+
+    free(cursor);
+    free(index_cursor);
+
+    return EXECUTE_SUCCESS;
+  }
+}
+
+void print_row(Row *row) {
+  printf("(%d, %s, %s)\n", row->id, row->username, row->email);
 }
 
 ExecuteResult execute_select(Statement *statement, Table *table) {
-  Cursor *cursor;
-  if (statement->has_where && strcmp(statement->where_column, "id") == 0) {
-    uint32_t id = (uint32_t)atoi(statement->where_value);
-    cursor = table_find(table, id);
-  } else {
-    cursor = table_start(table);
+  if (statement->has_join) {
+    // Nested Loop Join
+    // Outer: Users (default)
+    // Inner: Orders
+
+    Cursor *outer_cursor = table_start(table, table->main_root_page_num);
+
+    while (!(outer_cursor->end_of_table)) {
+      Row outer_row;
+      void *outer_val = cursor_value(outer_cursor);
+      deserialize_row(outer_val, &outer_row);
+
+      // Inner Loop: Orders
+      Cursor *inner_cursor = table_start(table, table->orders_root_page_num);
+      while (!(inner_cursor->end_of_table)) {
+        void *page = get_page(table->pager, inner_cursor->page_num);
+
+        uint32_t key_size = sizeof(uint32_t);
+        uint32_t value_size = sizeof(OrderRow);
+        uint32_t cell_size = key_size + value_size;
+
+        void *inner_val =
+            leaf_node_value(page, inner_cursor->cell_num, cell_size, key_size);
+        OrderRow inner_row;
+        deserialize_order_row(inner_val, &inner_row);
+
+        // Check Join Condition: users.id = orders.user_id
+        if (outer_row.id == inner_row.user_id) {
+          printf("(%d, %s, %s) | (%d, %d, %s)\n", outer_row.id,
+                 outer_row.username, outer_row.email, inner_row.id,
+                 inner_row.user_id, inner_row.product_name);
+        }
+
+        cursor_advance(inner_cursor);
+      }
+      free(inner_cursor);
+
+      cursor_advance(outer_cursor);
+    }
+    free(outer_cursor);
+    return EXECUTE_SUCCESS;
   }
 
+  if (statement->has_where &&
+      strcmp(statement->where_column, "username") == 0) {
+    // Index Scan
+    Cursor *index_cursor =
+        table_find(table, table->index_root_page_num, statement->where_value,
+                   USERNAME_INDEX_KEY_SIZE, KEY_STRING);
+
+    void *node = get_page(table->pager, index_cursor->page_num);
+    uint32_t num_cells = *leaf_node_num_cells(node);
+
+    if (index_cursor->cell_num < num_cells) {
+      void *key = leaf_node_key(node, index_cursor->cell_num,
+                                USERNAME_INDEX_LEAF_CELL_SIZE);
+      if (compare_keys(key, statement->where_value, KEY_STRING,
+                       USERNAME_INDEX_KEY_SIZE) == 0) {
+        // Found match, get Primary Key
+        uint32_t *user_id_ptr = (uint32_t *)leaf_node_value(
+            node, index_cursor->cell_num, USERNAME_INDEX_LEAF_CELL_SIZE,
+            USERNAME_INDEX_KEY_SIZE);
+        uint32_t user_id = *user_id_ptr;
+
+        // Lookup in Main Table by ID
+        Cursor *main_cursor =
+            table_find(table, table->main_root_page_num, &user_id,
+                       MAIN_TABLE_KEY_SIZE, KEY_INT);
+
+        // Verify we found it
+        Row row;
+        deserialize_row(cursor_value(main_cursor), &row);
+        print_row(&row);
+
+        free(main_cursor);
+      }
+    }
+    free(index_cursor);
+    return EXECUTE_SUCCESS;
+  }
+
+  // Full Table Scan (Main Table)
+  Cursor *cursor = table_start(table, table->main_root_page_num);
   Row row;
   while (!(cursor->end_of_table)) {
     deserialize_row(cursor_value(cursor), &row);
 
     int match = 1;
     if (statement->has_where) {
+      // Handle ID filter (int)
       if (strcmp(statement->where_column, "id") == 0) {
-        uint32_t id = (uint32_t)atoi(statement->where_value);
-        if (row.id != id)
+        int val = atoi(statement->where_value);
+        if (row.id != val)
           match = 0;
-
-        // If we used index scan and found a mismatch (or end of table), we can
-        // stop But table_find returns the position where key *should* be. If
-        // key is unique, we only check this one cell. If we want to support
-        // non-unique keys later, we'd continue. For now, if we did index scan,
-        // we can just check this one row and break.
-      } else if (strcmp(statement->where_column, "username") == 0) {
+      }
+      // Handle Username filter (string)
+      else if (strcmp(statement->where_column, "username") == 0) {
         if (strcmp(row.username, statement->where_value) != 0)
-          match = 0;
-      } else if (strcmp(statement->where_column, "email") == 0) {
-        if (strcmp(row.email, statement->where_value) != 0)
           match = 0;
       }
     }
 
     if (match) {
-      printf("(%d, %s, %s)\n", row.id, row.username, row.email);
+      print_row(&row);
     }
-
-    // If we are doing index lookup on ID, we only need to check one row
-    if (statement->has_where && strcmp(statement->where_column, "id") == 0) {
-      break;
-    }
-
     cursor_advance(cursor);
   }
   free(cursor);
@@ -73,24 +189,31 @@ ExecuteResult execute_delete(Statement *statement, Table *table) {
   Cursor *cursor;
   if (statement->has_where && strcmp(statement->where_column, "id") == 0) {
     uint32_t id = (uint32_t)atoi(statement->where_value);
-    cursor = table_find(table, id);
+    cursor = table_find(table, table->main_root_page_num, &id,
+                        MAIN_TABLE_KEY_SIZE, KEY_INT);
 
     Row row;
     deserialize_row(cursor_value(cursor), &row);
     if (row.id == id) {
-      leaf_node_delete(cursor, id);
+      // Delete from Main Table
+      leaf_node_delete(cursor, &id, MAIN_TABLE_KEY_SIZE, KEY_INT);
+
+      // Delete from Index
+      Cursor *index_cursor =
+          table_find(table, table->index_root_page_num, row.username,
+                     USERNAME_INDEX_KEY_SIZE, KEY_STRING);
+      leaf_node_delete(index_cursor, row.username, USERNAME_INDEX_KEY_SIZE,
+                       KEY_STRING);
+      free(index_cursor);
+
       printf("Deleted row with id %d\n", id);
     }
     free(cursor);
     return EXECUTE_SUCCESS;
   }
 
-  // Full table scan delete (not optimized, and tricky with cursor)
-  // For now, only support ID-based delete or simple delete all (if we implement
-  // it carefully) But the task said "DELETE Support", implying WHERE clause. If
-  // WHERE is not ID, we need full scan.
-
-  cursor = table_start(table);
+  // Full table scan delete
+  cursor = table_start(table, table->main_root_page_num);
   Row row;
   while (!(cursor->end_of_table)) {
     deserialize_row(cursor_value(cursor), &row);
@@ -111,31 +234,22 @@ ExecuteResult execute_delete(Statement *statement, Table *table) {
     }
 
     if (match) {
-      leaf_node_delete(cursor, row.id);
-      printf("Deleted row with id %d\n", row.id);
-      // Do NOT advance cursor, because next row shifted into current slot
-      // But we need to check if we are at end of leaf?
-      // leaf_node_delete decrements num_cells.
-      // If we are at the last cell and delete it, num_cells decreases, so
-      // cursor->cell_num might be == num_cells. In that case, we need to
-      // advance to next leaf? But cursor_advance handles cell_num >= num_cells.
-      // So we can just check if we are at end.
-      // Actually, if we delete, the current cell is now the *next* row.
-      // So we should process the *same* cell_num again.
-      // But we need to check if we reached the end of the node.
+      // Delete from Main Table
+      leaf_node_delete(cursor, &(row.id), MAIN_TABLE_KEY_SIZE, KEY_INT);
 
-      // Simple hack: Close and reopen cursor? No, that's inefficient.
-      // Let's just NOT advance. But we need to check if we need to jump to next
-      // leaf. If cell_num == num_cells (after delete), we need to advance.
+      // Delete from Index
+      Cursor *index_cursor =
+          table_find(table, table->index_root_page_num, row.username,
+                     USERNAME_INDEX_KEY_SIZE, KEY_STRING);
+      leaf_node_delete(index_cursor, row.username, USERNAME_INDEX_KEY_SIZE,
+                       KEY_STRING);
+      free(index_cursor);
+
+      printf("Deleted row with id %d\n", row.id);
 
       void *node = get_page(table->pager, cursor->page_num);
       uint32_t num_cells = *leaf_node_num_cells(node);
       if (cursor->cell_num >= num_cells) {
-        // We deleted the last cell in this node.
-        // We need to advance to next leaf.
-        // But cursor_advance increments cell_num first.
-        // We want to go to next leaf, cell 0.
-
         uint32_t next_page_num = *leaf_node_next_leaf(node);
         if (next_page_num == 0) {
           cursor->end_of_table = true;
@@ -144,12 +258,55 @@ ExecuteResult execute_delete(Statement *statement, Table *table) {
           cursor->cell_num = 0;
         }
       }
-      // Else: stay at current cell_num, which now holds the next row.
     } else {
       cursor_advance(cursor);
     }
   }
   free(cursor);
+  return EXECUTE_SUCCESS;
+}
+
+ExecuteResult execute_insert_select(Statement *statement, Table *table) {
+  // Hardcoded logic for: INSERT INTO orders SELECT ... FROM users
+  if (strcmp(statement->table_name, "orders") == 0 &&
+      strcmp(statement->select_source_table, "users") == 0) {
+
+    Cursor *source_cursor = table_start(table, table->main_root_page_num);
+
+    while (!(source_cursor->end_of_table)) {
+      Row source_row;
+      deserialize_row(cursor_value(source_cursor), &source_row);
+
+      int match = 1;
+      if (statement->select_has_where) {
+        // Simple string match on username for now
+        if (strcmp(statement->select_where_column, "username") == 0) {
+          if (strcmp(source_row.username, statement->select_where_value) != 0)
+            match = 0;
+        }
+      }
+
+      if (match) {
+        // Create Order Row
+        OrderRow order;
+        order.id = source_row.id + 1000; // Offset to distinguish
+        order.user_id = source_row.id;
+        strcpy(order.product_name, "AutoImport");
+
+        // Insert into Orders
+        Cursor *target_cursor = table_end(table, table->orders_root_page_num);
+        leaf_node_insert(target_cursor, &(order.id), sizeof(uint32_t), &order,
+                         sizeof(OrderRow), KEY_INT);
+        free(target_cursor);
+
+        printf("Inserted Order %d for User %d\n", order.id, order.user_id);
+      }
+
+      cursor_advance(source_cursor);
+    }
+    free(source_cursor);
+    return EXECUTE_SUCCESS;
+  }
   return EXECUTE_SUCCESS;
 }
 
@@ -161,6 +318,8 @@ ExecuteResult execute_statement(Statement *statement, Table *table) {
     return execute_select(statement, table);
   case STATEMENT_DELETE:
     return execute_delete(statement, table);
+  case STATEMENT_INSERT_SELECT:
+    return execute_insert_select(statement, table);
   }
   return EXECUTE_SUCCESS;
 }

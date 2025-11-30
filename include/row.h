@@ -22,4 +22,22 @@ typedef struct {
 #define EMAIL_OFFSET (USERNAME_OFFSET + USERNAME_SIZE)
 #define ROW_SIZE (ID_SIZE + USERNAME_SIZE + EMAIL_SIZE)
 
+#define COLUMN_PRODUCT_NAME_SIZE 32
+
+typedef struct {
+  uint32_t id;
+  uint32_t user_id;
+  char product_name[COLUMN_PRODUCT_NAME_SIZE + 1];
+} OrderRow;
+
+#define ORDER_ID_SIZE size_of_attribute(OrderRow, id)
+#define ORDER_USER_ID_SIZE size_of_attribute(OrderRow, user_id)
+#define ORDER_PRODUCT_NAME_SIZE size_of_attribute(OrderRow, product_name)
+
+#define ORDER_ID_OFFSET 0
+#define ORDER_USER_ID_OFFSET (ORDER_ID_OFFSET + ORDER_ID_SIZE)
+#define ORDER_PRODUCT_NAME_OFFSET (ORDER_USER_ID_OFFSET + ORDER_USER_ID_SIZE)
+#define ORDER_ROW_SIZE                                                         \
+  (ORDER_ID_SIZE + ORDER_USER_ID_SIZE + ORDER_PRODUCT_NAME_SIZE)
+
 #endif

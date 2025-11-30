@@ -1,23 +1,20 @@
 #include "cursor.h"
 #include "node.h"
-#include <stdio.h>
+#include "table.h"
 #include <stdlib.h>
 
-Cursor *table_start(Table *table) {
+Cursor *table_start(Table *table, uint32_t root_page_num) {
   Cursor *cursor = malloc(sizeof(Cursor));
   cursor->table = table;
 
-  uint32_t page_num = table->root_page_num;
+  uint32_t page_num = root_page_num;
   void *node = get_page(table->pager, page_num);
   uint32_t num_cells = *leaf_node_num_cells(node);
 
-  // For now, assume root is leaf or handle basic traversal if internal
-  // In a full implementation, we'd traverse down to the leftmost leaf
-  // But since we only split root, the root might be internal.
-  // If root is internal, we need to follow child 0 down.
-
   while (get_node_type(node) == NODE_INTERNAL) {
-    page_num = *internal_node_child(node, 0);
+    uint32_t child_page_num = *internal_node_child(
+        node, 0, MAIN_TABLE_INTERNAL_KEY_SIZE, MAIN_TABLE_INTERNAL_CHILD_SIZE);
+    page_num = child_page_num;
     node = get_page(table->pager, page_num);
   }
 
@@ -30,17 +27,17 @@ Cursor *table_start(Table *table) {
   return cursor;
 }
 
-Cursor *table_end(Table *table) {
+Cursor *table_end(Table *table, uint32_t root_page_num) {
   Cursor *cursor = malloc(sizeof(Cursor));
   cursor->table = table;
-  cursor->page_num = table->root_page_num;
+  cursor->page_num = root_page_num;
 
-  void *root_node = get_page(table->pager, table->root_page_num);
+  void *root_node = get_page(table->pager, root_page_num);
 
   while (get_node_type(root_node) == NODE_INTERNAL) {
     uint32_t right_child_page_num = *internal_node_right_child(root_node);
-    cursor->page_num = right_child_page_num;
     root_node = get_page(table->pager, right_child_page_num);
+    cursor->page_num = right_child_page_num;
   }
 
   uint32_t num_cells = *leaf_node_num_cells(root_node);
@@ -50,28 +47,44 @@ Cursor *table_end(Table *table) {
   return cursor;
 }
 
-Cursor *table_find(Table *table, uint32_t key) {
-  uint32_t root_page_num = table->root_page_num;
+Cursor *table_find(Table *table, uint32_t root_page_num, void *key,
+                   uint32_t key_size, KeyType key_type) {
   void *root_node = get_page(table->pager, root_page_num);
 
   if (get_node_type(root_node) == NODE_LEAF) {
-    return leaf_node_find(table, root_page_num, key);
+    uint32_t value_size = (key_type == KEY_INT) ? MAIN_TABLE_VALUE_SIZE
+                                                : USERNAME_INDEX_VALUE_SIZE;
+    return leaf_node_find(table, root_page_num, key, key_size, value_size,
+                          key_type);
   } else {
-    uint32_t page_num = root_page_num;
-    void *node = root_node;
-    while (get_node_type(node) == NODE_INTERNAL) {
-      uint32_t child_index = internal_node_find_child(node, key);
-      page_num = *internal_node_child(node, child_index);
-      node = get_page(table->pager, page_num);
-    }
-    return leaf_node_find(table, page_num, key);
+    uint32_t child_size = sizeof(uint32_t);
+    uint32_t child_index = internal_node_find_child(root_node, key, key_size,
+                                                    child_size, key_type);
+    uint32_t child_page_num =
+        *internal_node_child(root_node, child_index, key_size, child_size);
+    return table_find(table, child_page_num, key, key_size, key_type);
   }
 }
 
 void *cursor_value(Cursor *cursor) {
   uint32_t page_num = cursor->page_num;
   void *page = get_page(cursor->table->pager, page_num);
-  return leaf_node_value(page, cursor->cell_num);
+
+  // We need to know if we are in Main Table or Index to know value size/offset?
+  // cursor_value is mainly used for Main Table (SELECT *).
+  // For Index, we extract value manually in execute_select.
+  // So let's assume Main Table for now.
+  // Or we can check if page belongs to Main or Index? No easy way.
+  // But cursor_value returns void*.
+  // leaf_node_value needs key_size.
+  // Main Table key size is 4.
+  // Index key size is 32.
+  // We don't know which one it is here.
+  // But cursor_value is called by deserialize_row which expects Main Table Row.
+  // So it's safe to assume Main Table for now.
+
+  return leaf_node_value(page, cursor->cell_num, MAIN_TABLE_LEAF_CELL_SIZE,
+                         MAIN_TABLE_KEY_SIZE);
 }
 
 void cursor_advance(Cursor *cursor) {
