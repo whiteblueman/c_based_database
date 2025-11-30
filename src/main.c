@@ -5,14 +5,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+// Forward declaration
+void run_server(const char *filename);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     printf("Must supply a database filename.\n");
+    printf("Usage: %s <filename> [--server]\n", argv[0]);
     fflush(stdout);
     exit(EXIT_FAILURE);
   }
+
   char *filename = argv[1];
+
+  if (argc > 2 && strcmp(argv[2], "--server") == 0) {
+    run_server(filename);
+    return 0;
+  }
+
   Table *table = db_open(filename);
 
   InputBuffer *input_buffer = new_input_buffer();
@@ -48,9 +60,12 @@ int main(int argc, char *argv[]) {
       continue;
     }
 
-    switch (execute_statement(&statement, table)) {
+    switch (execute_statement(&statement, table, STDOUT_FILENO)) {
     case EXECUTE_SUCCESS:
       printf("Executed.\n");
+      break;
+    case EXECUTE_DUPLICATE_KEY:
+      printf("Error: Duplicate key.\n");
       break;
     case EXECUTE_TABLE_FULL:
       printf("Error: Table full.\n");
