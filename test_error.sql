@@ -1,0 +1,5 @@
+insert -1 user1 user1@example.com
+insert 1 averylongusernamethatisdefinitelymorethan32characters user1@example.com
+insert 1 user1 averylongemailthatisdefinitelymorethan255characters...averylongemailthatisdefinitelymorethan255characters...averylongemailthatisdefinitelymorethan255characters...averylongemailthatisdefinitelymorethan255characters...averylongemailthatisdefinitelymorethan255characters...averylongemailthatisdefinitelymorethan255characters...
+select
+.exit

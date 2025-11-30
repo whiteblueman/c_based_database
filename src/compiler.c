@@ -90,12 +90,29 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
         args = strstr(input_buffer->buffer, "users") + 5;
       }
 
-      int args_assigned = sscanf(
-          args, "%d %s %s", &(statement->row_to_insert.id),
-          statement->row_to_insert.username, statement->row_to_insert.email);
+      int id;
+      char username[255];
+      char email[255];
+
+      int args_assigned = sscanf(args, "%d %s %s", &id, username, email);
       if (args_assigned < 3) {
         return PREPARE_SYNTAX_ERROR;
       }
+
+      if (id < 0) {
+        return PREPARE_NEGATIVE_ID;
+      }
+      if (strlen(username) > 32) {
+        return PREPARE_STRING_TOO_LONG;
+      }
+      if (strlen(email) > 255) {
+        return PREPARE_STRING_TOO_LONG;
+      }
+
+      statement->row_to_insert.id = id;
+      strcpy(statement->row_to_insert.username, username);
+      strcpy(statement->row_to_insert.email, email);
+
       return PREPARE_SUCCESS;
     }
   }
