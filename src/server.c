@@ -12,7 +12,7 @@
 #include "table.h"
 #include "vm.h"
 
-#define PORT 8080
+#define PORT 8088
 #define BUFFER_SIZE 1024
 
 void run_server(const char *filename) {
@@ -66,6 +66,7 @@ void run_server(const char *filename) {
 
       // Read from client
       int valread = read(new_socket, buffer, BUFFER_SIZE);
+      printf("Debug: Read %d bytes: '%s'\n", valread, buffer);
       if (valread <= 0) {
         // Client disconnected
         close(new_socket);
@@ -74,10 +75,15 @@ void run_server(const char *filename) {
       }
 
       // Remove newline at end if present
-      if (buffer[valread - 1] == '\n')
+      // Remove newline at end if present
+      if (valread > 0 && buffer[valread - 1] == '\n') {
         buffer[valread - 1] = '\0';
-      if (buffer[valread - 2] == '\r')
-        buffer[valread - 2] = '\0'; // Handle CRLF
+        valread--;
+      }
+      if (valread > 0 && buffer[valread - 1] == '\r') {
+        buffer[valread - 1] = '\0';
+        valread--;
+      }
 
       // Copy to input buffer
       // Note: input_buffer->buffer is usually managed by getline, but here we
@@ -130,6 +136,8 @@ void run_server(const char *filename) {
                 input_buffer->buffer);
         continue;
       }
+      printf("Debug: Calling execute_statement\n");
+      fflush(stdout);
 
       switch (execute_statement(&statement, table, new_socket)) {
       case EXECUTE_SUCCESS:

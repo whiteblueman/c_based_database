@@ -27,7 +27,10 @@ typedef enum {
   STATEMENT_BEGIN,
   STATEMENT_COMMIT,
   STATEMENT_ROLLBACK,
-  STATEMENT_CREATE_TABLE
+  STATEMENT_CREATE_TABLE,
+  STATEMENT_SHOW_TABLES,
+  STATEMENT_DESC_TABLE,
+  STATEMENT_SHOW_INDEX
 } StatementType;
 
 typedef struct {
@@ -43,6 +46,10 @@ typedef struct {
   char join_table_name[32];
   char join_condition_left[32];  // e.g. users.id
   char join_condition_right[32]; // e.g. orders.user_id
+  int limit;                     // -1 for no limit
+
+  char select_columns[10][32];
+  int num_select_columns; // 0 means *
 
   // For INSERT INTO ... SELECT ...
   char select_source_table[32];
@@ -53,7 +60,16 @@ typedef struct {
 
   // For CREATE TABLE
   char create_table_name[32];
-  int create_schema_type; // 0=User, 1=Order
+  uint32_t create_num_columns;
+  char create_column_names[10][32]; // MAX_COLUMNS = 10
+  int create_column_types[10];      // 0 = INT, 1 = VARCHAR
+  int create_schema_type;           // 0=User, 1=Order
+
+  // For INSERT (Dynamic)
+  char *insert_values[10]; // Pointers to tokens in input buffer
+
+  // For DESC TABLE
+  char desc_table_name[32];
 } Statement;
 
 typedef struct Table Table;

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define TABLE_MAX_PAGES 100
+#define TABLE_MAX_PAGES 400
 
 typedef struct {
   int file_descriptor;

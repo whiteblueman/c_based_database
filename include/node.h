@@ -97,14 +97,16 @@ Cursor *leaf_node_find(Table *table, uint32_t page_num, void *key,
                        uint32_t key_size, uint32_t value_size,
                        KeyType key_type);
 void leaf_node_delete(Cursor *cursor, void *key, uint32_t key_size,
-                      KeyType key_type);
+                      uint32_t value_size, KeyType key_type);
 
 void internal_node_insert(Table *table, uint32_t parent_page_num,
                           uint32_t child_page_num, uint32_t key_size,
-                          uint32_t child_size, KeyType key_type);
+                          uint32_t child_size, KeyType key_type,
+                          uint32_t leaf_cell_size);
 void internal_node_split_and_insert(Table *table, uint32_t parent_page_num,
                                     uint32_t child_page_num, uint32_t key_size,
-                                    uint32_t child_size, KeyType key_type);
+                                    uint32_t child_size, KeyType key_type,
+                                    uint32_t leaf_cell_size);
 void update_internal_node_key(void *node, void *old_key, void *new_key,
                               uint32_t key_size, uint32_t child_size,
                               KeyType key_type);

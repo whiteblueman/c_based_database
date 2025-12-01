@@ -52,14 +52,41 @@ Table *db_open(const char *filename) {
     table->directory_root_page_num = 4;
 
     // Initialize default tables in memory
-    table->num_tables = 2;
+    table->num_tables = 0;
+    /*
+    // Initialize default tables
     strcpy(table->tables[0].name, "users");
-    table->tables[0].root_page_num = 1;
-    table->tables[0].schema_type = 0; // User
+    table->tables[0].root_page_num = 1; // Corrected to 1 as per meta_page init
+    table->tables[0].num_columns = 3;
+    strcpy(table->tables[0].columns[0].name, "id");
+    table->tables[0].columns[0].type = COLUMN_INT;
+    table->tables[0].columns[0].size = 4;
+    table->tables[0].columns[0].offset = 0;
+    strcpy(table->tables[0].columns[1].name, "username");
+    table->tables[0].columns[1].type = COLUMN_VARCHAR;
+    table->tables[0].columns[1].size = 32;
+    table->tables[0].columns[1].offset = 4;
+    strcpy(table->tables[0].columns[2].name, "email");
+    table->tables[0].columns[2].type = COLUMN_VARCHAR;
+    table->tables[0].columns[2].size = 255;
+    table->tables[0].columns[2].offset = 36;
 
     strcpy(table->tables[1].name, "orders");
-    table->tables[1].root_page_num = 3;
-    table->tables[1].schema_type = 1; // Order
+    table->tables[1].root_page_num = 3; // Corrected to 3 as per meta_page init
+    table->tables[1].num_columns = 3;
+    strcpy(table->tables[1].columns[0].name, "id");
+    table->tables[1].columns[0].type = COLUMN_INT;
+    table->tables[1].columns[0].size = 4;
+    table->tables[1].columns[0].offset = 0;
+    strcpy(table->tables[1].columns[1].name, "user_id");
+    table->tables[1].columns[1].type = COLUMN_INT;
+    table->tables[1].columns[1].size = 4;
+    table->tables[1].columns[1].offset = 4;
+    strcpy(table->tables[1].columns[2].name, "product_name");
+    table->tables[1].columns[2].type = COLUMN_VARCHAR;
+    table->tables[1].columns[2].size = 255; // Assuming 255 for now
+    table->tables[1].columns[2].offset = 8;
+    */
 
     // Persist default tables to Directory Table
     // For simplicity, we are NOT implementing full B-Tree insertion for
@@ -104,12 +131,38 @@ Table *db_open(const char *filename) {
       table->directory_root_page_num = 4;
       // Initialize defaults
       table->num_tables = 2;
+      // Migration for legacy DBs (User and Order tables)
       strcpy(table->tables[0].name, "users");
-      table->tables[0].root_page_num = *(uint32_t *)((char *)meta_page + 0);
-      table->tables[0].schema_type = 0;
+      table->tables[0].root_page_num = 0;
+      table->tables[0].num_columns = 3;
+      strcpy(table->tables[0].columns[0].name, "id");
+      table->tables[0].columns[0].type = COLUMN_INT;
+      table->tables[0].columns[0].size = 4;
+      table->tables[0].columns[0].offset = 0;
+      strcpy(table->tables[0].columns[1].name, "username");
+      table->tables[0].columns[1].type = COLUMN_VARCHAR;
+      table->tables[0].columns[1].size = 32;
+      table->tables[0].columns[1].offset = 4;
+      strcpy(table->tables[0].columns[2].name, "email");
+      table->tables[0].columns[2].type = COLUMN_VARCHAR;
+      table->tables[0].columns[2].size = 255;
+      table->tables[0].columns[2].offset = 36;
+
       strcpy(table->tables[1].name, "orders");
-      table->tables[1].root_page_num = *(uint32_t *)((char *)meta_page + 8);
-      table->tables[1].schema_type = 1;
+      table->tables[1].root_page_num = 2;
+      table->tables[1].num_columns = 3;
+      strcpy(table->tables[1].columns[0].name, "id");
+      table->tables[1].columns[0].type = COLUMN_INT;
+      table->tables[1].columns[0].size = 4;
+      table->tables[1].columns[0].offset = 0;
+      strcpy(table->tables[1].columns[1].name, "user_id");
+      table->tables[1].columns[1].type = COLUMN_INT;
+      table->tables[1].columns[1].size = 4;
+      table->tables[1].columns[1].offset = 4;
+      strcpy(table->tables[1].columns[2].name, "product_name");
+      table->tables[1].columns[2].type = COLUMN_VARCHAR;
+      table->tables[1].columns[2].size = 255;
+      table->tables[1].columns[2].offset = 8;
 
       // Save to page 4
       void *dir_page = get_page(pager, 4);

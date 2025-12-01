@@ -11,14 +11,22 @@
 #define MAX_TABLES 10
 #define TABLE_NAME_SIZE 32
 
+#define MAX_COLUMNS 10
+
+typedef enum { COLUMN_INT, COLUMN_VARCHAR } ColumnType;
+
+typedef struct {
+  char name[32];
+  ColumnType type;
+  uint32_t size;
+  uint32_t offset;
+} Column;
+
 typedef struct {
   char name[TABLE_NAME_SIZE];
   uint32_t root_page_num;
-  // We can add schema info here later if needed,
-  // for now we infer schema from name (users vs orders)
-  // or just store a type flag.
-  // Let's store a type flag: 0 = User, 1 = Order
-  int schema_type;
+  uint32_t num_columns;
+  Column columns[MAX_COLUMNS];
 } TableInfo;
 
 typedef struct Table {

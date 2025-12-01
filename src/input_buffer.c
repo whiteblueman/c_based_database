@@ -1,6 +1,9 @@
 #include "input_buffer.h"
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 InputBuffer *new_input_buffer() {
   InputBuffer *input_buffer = malloc(sizeof(InputBuffer));
@@ -10,23 +13,28 @@ InputBuffer *new_input_buffer() {
   return input_buffer;
 }
 
-void print_prompt() { printf("db > "); }
+void print_prompt() {
+  // Prompt is handled by readline
+}
 
 void read_input(InputBuffer *input_buffer) {
-  ssize_t bytes_read =
-      getline(&(input_buffer->buffer), &(input_buffer->buffer_length), stdin);
+  char *line = readline("db > ");
 
-  if (bytes_read <= 0) {
-    printf("Error reading input\n");
-    exit(EXIT_FAILURE);
+  if (line == NULL) {
+    // EOF
+    exit(EXIT_SUCCESS);
   }
 
-  // Ignore trailing newline
-  input_buffer->input_length = bytes_read - 1;
-  input_buffer->buffer[bytes_read - 1] = 0;
+  if (line[0] != '\0') {
+    add_history(line);
+  }
+
+  input_buffer->input_length = strlen(line);
+  input_buffer->buffer = line;
+  input_buffer->buffer_length = input_buffer->input_length + 1;
 }
 
 void close_input_buffer(InputBuffer *input_buffer) {
-  free(input_buffer->buffer);
+  free(input_buffer->buffer); // readline allocates this
   free(input_buffer);
 }

@@ -39,8 +39,11 @@ void *get_page(Pager *pager, uint32_t page_num) {
   if (page_num > TABLE_MAX_PAGES) {
     printf("Tried to fetch page number out of bounds. %d > %d\n", page_num,
            TABLE_MAX_PAGES);
+    fflush(stdout);
     exit(EXIT_FAILURE);
   }
+  // printf("Debug: get_page %d\n", page_num);
+  // fflush(stdout);
 
   if (pager->pages[page_num] == NULL) {
     // Cache miss. Allocate memory and load from file.

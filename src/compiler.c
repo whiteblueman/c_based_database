@@ -5,7 +5,8 @@
 
 MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table,
                                   int out_fd) {
-  if (strcmp(input_buffer->buffer, ".exit") == 0) {
+  if (strcmp(input_buffer->buffer, ".exit") == 0 ||
+      strcmp(input_buffer->buffer, "exit") == 0) {
     close_input_buffer(input_buffer);
     db_close(table);
     exit(EXIT_SUCCESS);
@@ -26,9 +27,95 @@ MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table,
 
 PrepareResult prepare_statement(InputBuffer *input_buffer,
                                 Statement *statement) {
-  // printf("Debug: prepare_statement buffer: '%s' (Hex: %02x %02x %02x)\n",
-  // input_buffer->buffer, input_buffer->buffer[0], input_buffer->buffer[1],
-  // input_buffer->buffer[2]); INSERT
+  if (strncmp(input_buffer->buffer, "create table", 12) == 0 ||
+      strncmp(input_buffer->buffer, "CREATE TABLE", 12) == 0) {
+    statement->type = STATEMENT_CREATE_TABLE;
+    char *args = input_buffer->buffer + 12;
+    // Parse table name
+    char *paren = strchr(args, '(');
+    if (!paren) {
+      printf("Debug: No opening parenthesis found\n");
+      return PREPARE_SYNTAX_ERROR;
+    }
+
+    int name_len = paren - args;
+    while (name_len > 0 && args[name_len - 1] == ' ')
+      name_len--; // Trim trailing space
+    while (*args == ' ') {
+      args++;
+      name_len--;
+    } // Trim leading space
+
+    if (name_len >= 32)
+      return PREPARE_STRING_TOO_LONG;
+    strncpy(statement->create_table_name, args, name_len);
+    statement->create_table_name[name_len] = '\0';
+
+    // Parse columns
+    char *cols_start = paren + 1;
+    char *cols_end = strrchr(cols_start, ')');
+    if (!cols_end)
+      return PREPARE_SYNTAX_ERROR;
+    *cols_end = '\0'; // Terminate string at closing paren
+
+    statement->create_num_columns = 0;
+    char *token = strtok(cols_start, ",");
+    while (token != NULL) {
+      if (statement->create_num_columns >= 10)
+        break;
+
+      char col_name[32];
+      char col_type[32];
+      sscanf(token, "%s %s", col_name, col_type);
+
+      strcpy(statement->create_column_names[statement->create_num_columns],
+             col_name);
+      if (strcasecmp(col_type, "int") == 0 ||
+          strcasecmp(col_type, "integer") == 0) {
+        statement->create_column_types[statement->create_num_columns] =
+            0; // INT
+      } else {
+        statement->create_column_types[statement->create_num_columns] =
+            1; // VARCHAR
+      }
+      statement->create_num_columns++;
+      token = strtok(NULL, ",");
+    }
+
+    // Legacy support for schema_type (optional, can be removed if VM uses
+    // columns)
+    statement->create_schema_type = 0;
+
+    return PREPARE_SUCCESS;
+  }
+
+  if (strncasecmp(input_buffer->buffer, "show tables", 11) == 0) {
+    statement->type = STATEMENT_SHOW_TABLES;
+    return PREPARE_SUCCESS;
+  }
+
+  if (strncmp(input_buffer->buffer, "desc", 4) == 0 ||
+      strncmp(input_buffer->buffer, "DESC", 4) == 0) {
+    statement->type = STATEMENT_DESC_TABLE;
+    char *args = input_buffer->buffer + 4;
+    while (*args == ' ')
+      args++; // Skip whitespace
+    if (*args == '\0')
+      return PREPARE_SYNTAX_ERROR;
+
+    sscanf(args, "%s", statement->desc_table_name);
+    return PREPARE_SUCCESS;
+  }
+
+  if (strncasecmp(input_buffer->buffer, "show index from", 15) == 0) {
+    statement->type = STATEMENT_SHOW_INDEX;
+    char *args = input_buffer->buffer + 15;
+    while (*args == ' ')
+      args++;
+    sscanf(args, "%s", statement->desc_table_name); // Reuse desc_table_name
+    return PREPARE_SUCCESS;
+  }
+
   if (strncmp(input_buffer->buffer, "insert", 6) == 0 ||
       strncmp(input_buffer->buffer, "INSERT", 6) == 0) {
     statement->type = STATEMENT_INSERT;
@@ -37,154 +124,87 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
     char *into_ptr = strcasestr(input_buffer->buffer, "into");
     if (into_ptr) {
       // ANSI SQL: INSERT INTO <table> VALUES (...)
-      // Parse table name
-      char *table_start = into_ptr + 5;
-      char table_name[32];
-      sscanf(table_start, "%s", table_name);
-      strcpy(statement->table_name, table_name);
-
-      // Check for VALUES
-      char *values_ptr = strcasestr(input_buffer->buffer, "values");
+      // Check for VALUES first to define boundary
+      char *values_ptr = strcasestr(into_ptr, "values");
       if (values_ptr) {
+        // Parse table name between "into" and "values"
+        char *table_start = into_ptr + 4;
+        int name_len = values_ptr - table_start;
+
+        // Trim spaces
+        while (name_len > 0 && table_start[name_len - 1] == ' ')
+          name_len--;
+        while (*table_start == ' ') {
+          table_start++;
+          name_len--;
+        }
+
+        char table_name[32];
+        if (name_len >= 32)
+          return PREPARE_STRING_TOO_LONG;
+        strncpy(table_name, table_start, name_len);
+        table_name[name_len] = '\0';
+
+        strcpy(statement->table_name, table_name);
+
         // Parse values inside parentheses
         char *paren_start = strchr(values_ptr, '(');
         if (paren_start) {
-          if (strcmp(table_name, "orders") == 0) {
-            // INSERT INTO orders VALUES (id, user_id, 'product')
-            // Note: sscanf with %[^']' reads until single quote
-            int id, user_id;
-            char product[255];
-            // Try parsing: (100, 1, 'Apple')
-            // We need to handle quotes.
-            // Simplified parsing: assume format (id, user_id, 'product')
-            // Skip '(', read int, comma, int, comma, quote, string, quote, ')'
-            // Or just use sscanf with format
-            int assigned = sscanf(paren_start, "(%d, %d, '%[^']')", &id,
-                                  &user_id, product);
-            if (assigned < 3) {
-              // Try without quotes?
-              assigned = sscanf(paren_start, "(%d, %d, %[^)])", &id, &user_id,
-                                product);
+          // Dynamic parsing for any table
+          // Format: (val1, val2, ...)
+          char *vals = paren_start + 1;
+          int val_idx = 0;
+          char *token = strtok(vals, ",)");
+          while (token != NULL) {
+            if (val_idx >= 10)
+              break; // Limit to 10 columns for now
+
+            // Trim spaces
+            while (*token == ' ')
+              token++;
+
+            // Handle quotes
+            if (*token == '\'') {
+              token++; // Skip opening quote
+              char *quote_end = strchr(token, '\'');
+              if (quote_end)
+                *quote_end = '\0';
             }
 
-            if (assigned < 3)
-              return PREPARE_SYNTAX_ERROR;
+            // Store in statement
+            statement->insert_values[val_idx++] = token;
 
-            statement->order_to_insert.id = id;
-            statement->order_to_insert.user_id = user_id;
-            strcpy(statement->order_to_insert.product_name, product);
-            return PREPARE_SUCCESS;
-
-          } else {
-            // Default users: INSERT INTO users VALUES (id, 'username', 'email')
-            int id;
-            char username[255];
-            char email[255];
-
-            // Try parsing: (1, 'user1', 'email1')
-            int assigned = sscanf(paren_start, "(%d, '%[^']', '%[^']')", &id,
-                                  username, email);
-            if (assigned < 3) {
-              // Try without quotes
-              assigned = sscanf(paren_start, "(%d, %[^,], %[^)])", &id,
-                                username, email);
-              // Trim spaces if needed? sscanf %s skips spaces but %[^,] might
-              // not
-            }
-
-            if (assigned < 3)
-              return PREPARE_SYNTAX_ERROR;
-
-            if (id < 0)
-              return PREPARE_NEGATIVE_ID;
-            if (strlen(username) > 32)
-              return PREPARE_STRING_TOO_LONG;
-            if (strlen(email) > 255)
-              return PREPARE_STRING_TOO_LONG;
-
-            statement->row_to_insert.id = id;
-            strcpy(statement->row_to_insert.username, username);
-            strcpy(statement->row_to_insert.email, email);
-            return PREPARE_SUCCESS;
+            token = strtok(NULL, ",)");
           }
-        }
-      }
-
-      // Check for SELECT (INSERT INTO ... SELECT ...)
-      if (strcasestr(input_buffer->buffer, "select")) {
-        statement->type = STATEMENT_INSERT_SELECT;
-        // Parse target table already done above
-
-        // Parse Source Table
-        char *select_ptr = strcasestr(input_buffer->buffer, "select");
-        char *from_ptr = strcasestr(select_ptr, "from");
-        if (from_ptr) {
-          sscanf(from_ptr, "from %s", statement->select_source_table);
-
-          char *where_ptr = strcasestr(from_ptr, "where");
-          if (where_ptr) {
-            statement->select_has_where = 1;
-            sscanf(where_ptr, "where %s %s %s", statement->select_where_column,
-                   statement->select_where_operator,
-                   statement->select_where_value);
-          } else {
-            statement->select_has_where = 0;
-          }
+          statement->insert_values[val_idx] = NULL; // Null terminate array
           return PREPARE_SUCCESS;
         }
-        return PREPARE_SYNTAX_ERROR;
       }
     }
 
-    // Fallback to old syntax: insert 1 user1 email
-    // ... (Keep existing logic for backward compatibility or remove?)
-    // Let's keep it for now but maybe prioritize ANSI
+    // Check for SELECT (INSERT INTO ... SELECT ...)
+    if (strcasestr(input_buffer->buffer, "select")) {
+      statement->type = STATEMENT_INSERT_SELECT;
+      // Parse target table already done above
 
-    // Existing logic for "insert orders ..." or "insert ..."
-    // ...
-    // Copy-paste existing logic here or refactor.
-    // For brevity in this edit, I will include the old logic as fallback.
+      // Parse Source Table
+      char *select_ptr = strcasestr(input_buffer->buffer, "select");
+      char *from_ptr = strcasestr(select_ptr, "from");
+      if (from_ptr) {
+        sscanf(from_ptr, "from %s", statement->select_source_table);
 
-    // Simple parsing: check if "orders" is present early on
-    if (strstr(input_buffer->buffer, "orders") != NULL) {
-      strcpy(statement->table_name, "orders");
-      char *args = strstr(input_buffer->buffer, "orders") + 6;
-      int args_assigned =
-          sscanf(args, "%d %d %s", &(statement->order_to_insert.id),
-                 &(statement->order_to_insert.user_id),
-                 statement->order_to_insert.product_name);
-      if (args_assigned < 3) {
-        return PREPARE_SYNTAX_ERROR;
+        char *where_ptr = strcasestr(from_ptr, "where");
+        if (where_ptr) {
+          statement->select_has_where = 1;
+          sscanf(where_ptr, "where %s %s %s", statement->select_where_column,
+                 statement->select_where_operator,
+                 statement->select_where_value);
+        } else {
+          statement->select_has_where = 0;
+        }
+        return PREPARE_SUCCESS;
       }
-      return PREPARE_SUCCESS;
-    } else {
-      strcpy(statement->table_name, "users");
-      char *args = input_buffer->buffer + 6;
-      if (strstr(input_buffer->buffer, "users") != NULL) {
-        args = strstr(input_buffer->buffer, "users") + 5;
-      }
-
-      int id;
-      char username[255];
-      char email[255];
-
-      int args_assigned = sscanf(args, "%d %s %s", &id, username, email);
-      if (args_assigned < 3) {
-        return PREPARE_SYNTAX_ERROR;
-      }
-
-      if (id < 0)
-        return PREPARE_NEGATIVE_ID;
-      if (strlen(username) > 32)
-        return PREPARE_STRING_TOO_LONG;
-      if (strlen(email) > 255)
-        return PREPARE_STRING_TOO_LONG;
-
-      statement->row_to_insert.id = id;
-      strcpy(statement->row_to_insert.username, username);
-      strcpy(statement->row_to_insert.email, email);
-
-      return PREPARE_SUCCESS;
+      return PREPARE_SYNTAX_ERROR;
     }
   }
 
@@ -194,13 +214,45 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
     statement->type = STATEMENT_SELECT;
     statement->has_where = 0;
     statement->has_join = 0;
+    statement->limit = -1;
+    statement->num_select_columns = 0;
     strcpy(statement->table_name, "users"); // Default
 
-    // ANSI SQL: SELECT * FROM <table>
+    // ANSI SQL: SELECT <columns> FROM <table>
     char *from_ptr = strcasestr(input_buffer->buffer, "from");
     if (from_ptr) {
-      char *args = from_ptr + 4; // Skip "from"
+      char *args = from_ptr + 4;
       sscanf(args, "%s", statement->table_name);
+
+      // Parse columns between SELECT and FROM
+      char *select_ptr = input_buffer->buffer + 6; // Skip "select" (or SELECT)
+      int len = from_ptr - select_ptr;
+      char cols_str[256];
+      if (len < 256) {
+        strncpy(cols_str, select_ptr, len);
+        cols_str[len] = '\0';
+
+        // Check for *
+        if (strstr(cols_str, "*") == NULL) {
+          char *token = strtok(cols_str, ",");
+          while (token != NULL) {
+            // Trim spaces
+            while (*token == ' ')
+              token++;
+            char *end = token + strlen(token) - 1;
+            while (end > token && *end == ' ')
+              *end-- = '\0';
+
+            if (strlen(token) > 0) {
+              strcpy(statement->select_columns[statement->num_select_columns++],
+                     token);
+              if (statement->num_select_columns >= 10)
+                break;
+            }
+            token = strtok(NULL, ",");
+          }
+        }
+      }
     }
 
     // Check for JOIN
@@ -242,6 +294,17 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
         return PREPARE_SYNTAX_ERROR;
       }
     }
+
+    // Check for LIMIT
+    statement->limit = -1; // Default no limit
+    char *limit_ptr = strcasestr(input_buffer->buffer, "limit");
+    if (limit_ptr != NULL) {
+      char *args = limit_ptr + 5; // Skip "limit"
+      int limit_val;
+      if (sscanf(args, "%d", &limit_val) == 1) {
+        statement->limit = limit_val;
+      }
+    }
     return PREPARE_SUCCESS;
   }
 
@@ -274,27 +337,6 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
       } else {
         return PREPARE_SYNTAX_ERROR;
       }
-    }
-    return PREPARE_SUCCESS;
-  }
-
-  if (strncmp(input_buffer->buffer, "create table", 12) == 0) {
-    statement->type = STATEMENT_CREATE_TABLE;
-    char *args = input_buffer->buffer + 12;
-    // Format: create table <name> (<cols>)
-    // Example: create table my_users (id int, username varchar(32), email
-    // varchar(255))
-
-    char table_name[32];
-    sscanf(args, "%s", table_name);
-    strcpy(statement->create_table_name, table_name);
-
-    // Determine schema type by checking columns
-    // Simplistic check: if contains "product_name" -> Order, else User
-    if (strstr(input_buffer->buffer, "product_name")) {
-      statement->create_schema_type = 1; // Order
-    } else {
-      statement->create_schema_type = 0; // User
     }
     return PREPARE_SUCCESS;
   }

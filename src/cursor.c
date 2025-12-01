@@ -1,6 +1,7 @@
 #include "cursor.h"
 #include "node.h"
 #include "table.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 Cursor *table_start(Table *table, uint32_t root_page_num) {
@@ -58,10 +59,17 @@ Cursor *table_find(Table *table, uint32_t root_page_num, void *key,
                           key_type);
   } else {
     uint32_t child_size = sizeof(uint32_t);
+    uint32_t num_keys = *internal_node_num_keys(root_node);
     uint32_t child_index = internal_node_find_child(root_node, key, key_size,
                                                     child_size, key_type);
-    uint32_t child_page_num =
-        *internal_node_child(root_node, child_index, key_size, child_size);
+    uint32_t child_page_num;
+    if (child_index >= num_keys) {
+      child_page_num = *internal_node_right_child(root_node);
+    } else {
+      child_page_num =
+          *internal_node_child(root_node, child_index, key_size, child_size);
+    }
+
     return table_find(table, child_page_num, key, key_size, key_type);
   }
 }
