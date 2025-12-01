@@ -1,4 +1,0 @@
-db > (1, user1, person1@example.com)
-(3, user3, person3@example.com)
-Executed.
-db > 

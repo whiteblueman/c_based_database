@@ -26,7 +26,8 @@ typedef enum {
   STATEMENT_INSERT_SELECT,
   STATEMENT_BEGIN,
   STATEMENT_COMMIT,
-  STATEMENT_ROLLBACK
+  STATEMENT_ROLLBACK,
+  STATEMENT_CREATE_TABLE
 } StatementType;
 
 typedef struct {
@@ -49,11 +50,16 @@ typedef struct {
   char select_where_column[32];
   char select_where_operator[3];
   char select_where_value[255];
+
+  // For CREATE TABLE
+  char create_table_name[32];
+  int create_schema_type; // 0=User, 1=Order
 } Statement;
 
 typedef struct Table Table;
 
-MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table);
+MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table,
+                                  int out_fd);
 PrepareResult prepare_statement(InputBuffer *input_buffer,
                                 Statement *statement);
 

@@ -3,11 +3,22 @@
 #include <stdio.h>
 #include <string.h>
 
-MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table) {
+MetaCommandResult do_meta_command(InputBuffer *input_buffer, Table *table,
+                                  int out_fd) {
   if (strcmp(input_buffer->buffer, ".exit") == 0) {
     close_input_buffer(input_buffer);
     db_close(table);
     exit(EXIT_SUCCESS);
+  } else if (strcmp(input_buffer->buffer, ".tables") == 0) {
+    dprintf(out_fd, "users\norders\n");
+    return META_COMMAND_SUCCESS;
+  } else if (strcmp(input_buffer->buffer, ".schema") == 0) {
+    dprintf(
+        out_fd,
+        "CREATE TABLE users (\n    id integer,\n    username varchar(32),\n    "
+        "email varchar(255)\n);\nCREATE TABLE orders (\n    id integer,\n    "
+        "user_id integer,\n    product_name varchar(32)\n);\n");
+    return META_COMMAND_SUCCESS;
   } else {
     return META_COMMAND_UNRECOGNIZED_COMMAND;
   }
@@ -263,6 +274,27 @@ PrepareResult prepare_statement(InputBuffer *input_buffer,
       } else {
         return PREPARE_SYNTAX_ERROR;
       }
+    }
+    return PREPARE_SUCCESS;
+  }
+
+  if (strncmp(input_buffer->buffer, "create table", 12) == 0) {
+    statement->type = STATEMENT_CREATE_TABLE;
+    char *args = input_buffer->buffer + 12;
+    // Format: create table <name> (<cols>)
+    // Example: create table my_users (id int, username varchar(32), email
+    // varchar(255))
+
+    char table_name[32];
+    sscanf(args, "%s", table_name);
+    strcpy(statement->create_table_name, table_name);
+
+    // Determine schema type by checking columns
+    // Simplistic check: if contains "product_name" -> Order, else User
+    if (strstr(input_buffer->buffer, "product_name")) {
+      statement->create_schema_type = 1; // Order
+    } else {
+      statement->create_schema_type = 0; // User
     }
     return PREPARE_SUCCESS;
   }

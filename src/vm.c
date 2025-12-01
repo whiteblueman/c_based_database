@@ -31,12 +31,18 @@ void print_row(Row *row, int out_fd) {
 }
 
 ExecuteResult execute_insert(Statement *statement, Table *table, int out_fd) {
-  void *node = get_page(table->pager, table->main_root_page_num);
+  TableInfo *table_info = find_table(table, statement->table_name);
+  if (table_info == NULL) {
+    dprintf(out_fd, "Error: Table '%s' not found.\n", statement->table_name);
+    return EXECUTE_TABLE_FULL; // Reuse error code or add new one
+  }
+
+  void *node = get_page(table->pager, table_info->root_page_num);
   uint32_t num_cells = *leaf_node_num_cells(node);
 
   Row *row_to_insert = &(statement->row_to_insert);
   uint32_t key_to_insert = row_to_insert->id;
-  Cursor *cursor = table_find(table, table->main_root_page_num, &key_to_insert,
+  Cursor *cursor = table_find(table, table_info->root_page_num, &key_to_insert,
                               sizeof(uint32_t), KEY_INT);
 
   if (cursor->cell_num < num_cells) {
@@ -55,28 +61,42 @@ ExecuteResult execute_insert(Statement *statement, Table *table, int out_fd) {
                    sizeof(Row), KEY_INT);
   free(cursor);
 
-  // Insert into Secondary Index (Username)
-  Cursor *index_cursor =
-      table_find(table, table->index_root_page_num, row_to_insert->username,
-                 USERNAME_SIZE, KEY_STRING);
+  // Insert into Secondary Index (Username) - ONLY FOR DEFAULT USERS TABLE FOR
+  // NOW Or if we had a way to know if table has index. For now, let's keep
+  // index only on "users" table.
+  if (strcmp(statement->table_name, "users") == 0) {
+    // Hardcoded index root for users is 2
+    Cursor *index_cursor = table_find(table, 2, row_to_insert->username,
+                                      USERNAME_SIZE, KEY_STRING);
 
-  leaf_node_insert(index_cursor, row_to_insert->username, USERNAME_SIZE,
-                   &row_to_insert->id, sizeof(uint32_t), KEY_STRING);
-  free(index_cursor);
+    leaf_node_insert(index_cursor, row_to_insert->username, USERNAME_SIZE,
+                     &row_to_insert->id, sizeof(uint32_t), KEY_STRING);
+    free(index_cursor);
+  }
 
   return EXECUTE_SUCCESS;
 }
 
 ExecuteResult execute_select(Statement *statement, Table *table, int out_fd) {
   if (statement->has_join) {
-    // JOIN Logic
-    Cursor *user_cursor = table_start(table, table->main_root_page_num);
+    // JOIN Logic (Keep hardcoded for users/orders for now as per plan)
+    // ... (Existing JOIN logic)
+    // Actually, let's just leave JOIN as is, it uses table->main_root_page_num
+    // which is gone. We need to fix JOIN to use find_table("users") and
+    // find_table("orders").
+    TableInfo *users_info = find_table(table, "users");
+    TableInfo *orders_info = find_table(table, "orders");
+
+    if (!users_info || !orders_info)
+      return EXECUTE_SUCCESS;
+
+    Cursor *user_cursor = table_start(table, users_info->root_page_num);
 
     while (!user_cursor->end_of_table) {
       Row user_row;
       deserialize_row(cursor_value(user_cursor), &user_row);
 
-      Cursor *order_cursor = table_start(table, table->orders_root_page_num);
+      Cursor *order_cursor = table_start(table, orders_info->root_page_num);
       while (!order_cursor->end_of_table) {
         OrderRow order_row;
         deserialize_order_row(cursor_value(order_cursor), &order_row);
@@ -97,26 +117,46 @@ ExecuteResult execute_select(Statement *statement, Table *table, int out_fd) {
     return EXECUTE_SUCCESS;
   }
 
-  // Normal SELECT
-  Cursor *cursor = table_start(table, table->main_root_page_num);
+  TableInfo *table_info = find_table(table, statement->table_name);
+  if (table_info == NULL) {
+    dprintf(out_fd, "Error: Table '%s' not found.\n", statement->table_name);
+    return EXECUTE_TABLE_FULL;
+  }
 
-  // Optimization: ID Index Scan
-  if (statement->has_where && strcmp(statement->where_column, "id") == 0 &&
+  if (table_info->schema_type == 1) { // Orders
+    Cursor *cursor = table_start(table, table_info->root_page_num);
+    while (!cursor->end_of_table) {
+      OrderRow row;
+      deserialize_order_row(cursor_value(cursor), &row);
+      dprintf(out_fd, "(%d, %d, %s)\n", row.id, row.user_id, row.product_name);
+      cursor_advance(cursor);
+    }
+    free(cursor);
+    return EXECUTE_SUCCESS;
+  }
+
+  // Normal SELECT (Users or User-like)
+  Cursor *cursor = table_start(table, table_info->root_page_num);
+
+  // Optimization: ID Index Scan (Only if table is "users" for now)
+  if (strcmp(statement->table_name, "users") == 0 && statement->has_where &&
+      strcmp(statement->where_column, "id") == 0 &&
       strcmp(statement->where_operator, "=") == 0) {
     uint32_t id_to_find = atoi(statement->where_value);
     free(cursor);
-    cursor = table_find(table, table->main_root_page_num, &id_to_find,
+    cursor = table_find(table, table_info->root_page_num, &id_to_find,
                         sizeof(uint32_t), KEY_INT);
   }
-  // Optimization: Username Index Scan
-  else if (statement->has_where &&
+  // Optimization: Username Index Scan (Only if table is "users")
+  else if (strcmp(statement->table_name, "users") == 0 &&
+           statement->has_where &&
            strcmp(statement->where_column, "username") == 0 &&
            strcmp(statement->where_operator, "=") == 0) {
     char *username_to_find = statement->where_value;
     free(cursor);
+    // Hardcoded index root 2
     Cursor *index_cursor =
-        table_find(table, table->index_root_page_num, username_to_find,
-                   USERNAME_SIZE, KEY_STRING);
+        table_find(table, 2, username_to_find, USERNAME_SIZE, KEY_STRING);
 
     if (!index_cursor->end_of_table) {
       void *page = get_page(table->pager, index_cursor->page_num);
@@ -127,13 +167,13 @@ ExecuteResult execute_select(Statement *statement, Table *table, int out_fd) {
             page, index_cursor->cell_num, USERNAME_INDEX_LEAF_CELL_SIZE,
             USERNAME_INDEX_KEY_SIZE);
         uint32_t id = *id_ptr;
-        cursor = table_find(table, table->main_root_page_num, &id,
+        cursor = table_find(table, table_info->root_page_num, &id,
                             sizeof(uint32_t), KEY_INT);
       } else {
-        cursor = table_end(table, table->main_root_page_num);
+        cursor = table_end(table, table_info->root_page_num);
       }
     } else {
-      cursor = table_end(table, table->main_root_page_num);
+      cursor = table_end(table, table_info->root_page_num);
     }
     free(index_cursor);
   }
@@ -181,13 +221,17 @@ ExecuteResult execute_select(Statement *statement, Table *table, int out_fd) {
 
 ExecuteResult execute_delete(Statement *statement, Table *table, int out_fd) {
   (void)out_fd; // Unused
-  Cursor *cursor = table_start(table, table->main_root_page_num);
+  TableInfo *table_info = find_table(table, statement->table_name);
+  if (!table_info)
+    return EXECUTE_SUCCESS;
+
+  Cursor *cursor = table_start(table, table_info->root_page_num);
 
   if (statement->has_where && strcmp(statement->where_column, "id") == 0 &&
       strcmp(statement->where_operator, "=") == 0) {
     uint32_t id_to_find = atoi(statement->where_value);
     free(cursor);
-    cursor = table_find(table, table->main_root_page_num, &id_to_find,
+    cursor = table_find(table, table_info->root_page_num, &id_to_find,
                         sizeof(uint32_t), KEY_INT);
   }
 
@@ -214,11 +258,13 @@ ExecuteResult execute_delete(Statement *statement, Table *table, int out_fd) {
     if (pass) {
       leaf_node_delete(cursor, &row.id, sizeof(uint32_t), KEY_INT);
 
-      Cursor *index_cursor =
-          table_find(table, table->index_root_page_num, row.username,
-                     USERNAME_SIZE, KEY_STRING);
-      leaf_node_delete(index_cursor, row.username, USERNAME_SIZE, KEY_STRING);
-      free(index_cursor);
+      // Delete from index only if users table
+      if (strcmp(statement->table_name, "users") == 0) {
+        Cursor *index_cursor =
+            table_find(table, 2, row.username, USERNAME_SIZE, KEY_STRING);
+        leaf_node_delete(index_cursor, row.username, USERNAME_SIZE, KEY_STRING);
+        free(index_cursor);
+      }
 
       if (statement->has_where && strcmp(statement->where_column, "id") == 0 &&
           strcmp(statement->where_operator, "=") == 0) {
@@ -234,7 +280,15 @@ ExecuteResult execute_delete(Statement *statement, Table *table, int out_fd) {
 
 ExecuteResult execute_insert_select(Statement *statement, Table *table,
                                     int out_fd) {
-  Cursor *cursor = table_start(table, table->main_root_page_num);
+  TableInfo *source_info = find_table(table, statement->select_source_table);
+  TableInfo *dest_info = find_table(table, statement->table_name);
+
+  if (!source_info || !dest_info) {
+    dprintf(out_fd, "Error: Table not found.\n");
+    return EXECUTE_TABLE_FULL;
+  }
+
+  Cursor *cursor = table_start(table, source_info->root_page_num);
   while (!cursor->end_of_table) {
     Row row;
     deserialize_row(cursor_value(cursor), &row);
@@ -255,7 +309,7 @@ ExecuteResult execute_insert_select(Statement *statement, Table *table,
       order.user_id = row.id;
       strcpy(order.product_name, "AutoImport");
 
-      Cursor *order_cursor = table_find(table, table->orders_root_page_num,
+      Cursor *order_cursor = table_find(table, dest_info->root_page_num,
                                         &order.id, sizeof(uint32_t), KEY_INT);
       leaf_node_insert(order_cursor, &order.id, sizeof(uint32_t), &order,
                        sizeof(OrderRow), KEY_INT);
@@ -300,6 +354,36 @@ ExecuteResult execute_commit(Statement *statement, Table *table, int out_fd) {
   return EXECUTE_SUCCESS;
 }
 
+ExecuteResult execute_create_table(Statement *statement, Table *table,
+                                   int out_fd) {
+  if (table->num_tables >= MAX_TABLES) {
+    dprintf(out_fd, "Error: Max tables reached.\n");
+    return EXECUTE_TABLE_FULL;
+  }
+
+  if (find_table(table, statement->create_table_name) != NULL) {
+    dprintf(out_fd, "Error: Table already exists.\n");
+    return EXECUTE_DUPLICATE_KEY;
+  }
+
+  // Allocate new page
+  uint32_t root_page_num = get_unused_page_num(table->pager);
+  void *root_node = get_page(table->pager, root_page_num);
+  initialize_leaf_node(root_node);
+  set_node_root(root_node, true);
+  pager_flush(table->pager, root_page_num, PAGE_SIZE);
+
+  // Add to table list
+  TableInfo *new_table = &table->tables[table->num_tables];
+  strcpy(new_table->name, statement->create_table_name);
+  new_table->root_page_num = root_page_num;
+  new_table->schema_type = statement->create_schema_type;
+  table->num_tables++;
+
+  dprintf(out_fd, "Table created.\n");
+  return EXECUTE_SUCCESS;
+}
+
 ExecuteResult execute_rollback(Statement *statement, Table *table, int out_fd) {
   (void)statement;
   if (!table->in_transaction) {
@@ -318,16 +402,19 @@ ExecuteResult execute_statement(Statement *statement, Table *table,
                                 int out_fd) {
   switch (statement->type) {
   case STATEMENT_INSERT:
-    if (strcmp(statement->table_name, "orders") == 0) {
-      Cursor *cursor = table_find(table, table->orders_root_page_num,
-                                  &(statement->order_to_insert.id),
-                                  sizeof(uint32_t), KEY_INT);
-      leaf_node_insert(cursor, &(statement->order_to_insert.id),
-                       sizeof(uint32_t), &(statement->order_to_insert),
-                       sizeof(OrderRow), KEY_INT);
-      free(cursor);
-      return EXECUTE_SUCCESS;
-    } else {
+    // Check table type to decide how to insert
+    {
+      TableInfo *info = find_table(table, statement->table_name);
+      if (info && info->schema_type == 1) { // Order
+        Cursor *cursor = table_find(table, info->root_page_num,
+                                    &(statement->order_to_insert.id),
+                                    sizeof(uint32_t), KEY_INT);
+        leaf_node_insert(cursor, &(statement->order_to_insert.id),
+                         sizeof(uint32_t), &(statement->order_to_insert),
+                         sizeof(OrderRow), KEY_INT);
+        free(cursor);
+        return EXECUTE_SUCCESS;
+      }
       return execute_insert(statement, table, out_fd);
     }
   case STATEMENT_SELECT:
@@ -342,6 +429,8 @@ ExecuteResult execute_statement(Statement *statement, Table *table,
     return execute_commit(statement, table, out_fd);
   case STATEMENT_ROLLBACK:
     return execute_rollback(statement, table, out_fd);
+  case STATEMENT_CREATE_TABLE:
+    return execute_create_table(statement, table, out_fd);
   }
   return EXECUTE_SUCCESS;
 }

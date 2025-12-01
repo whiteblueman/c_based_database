@@ -1,4 +1,0 @@
-Read page 0, bytes: 4096
-table_start: page 0, num_cells: 2
-Flushing page 0. Num cells: 2
-Flushed page 0, bytes: 4096

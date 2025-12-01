@@ -1,3 +1,0 @@
-Read page 0, bytes: 0
-Flushing page 0. Num cells: 2
-Flushed page 0, bytes: 4096

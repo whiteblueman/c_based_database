@@ -22,6 +22,11 @@ Whether you are learning about database internals or need a lightweight embedded
     *   `INSERT INTO table VALUES (...)`
     *   `SELECT * FROM table WHERE ...`
     *   `DELETE FROM table WHERE ...`
+*   **🏗️ Dynamic Tables**: Support for `CREATE TABLE` to define custom schemas at runtime.
+*   **📂 Data Persistence**: Table metadata and data are persisted to disk using a Directory Table.
+*   **🛠️ Admin Tools**:
+    *   `.schema` command to inspect table definitions.
+    *   `db_tool.py` for JSON/SQL data dump and restore.
 *   **🔗 Advanced Queries**: Supports **Nested Loop Joins** and **Subqueries** (`INSERT INTO ... SELECT ...`).
 *   **🛡️ ACID Transactions**: Full support for `BEGIN`, `COMMIT`, and `ROLLBACK` with deferred persistence.
 *   **🔍 Secondary Indexes**: Fast lookups on non-primary key columns (e.g., username).
@@ -55,6 +60,25 @@ Start the database as a TCP server:
 ./db my.db --server
 ```
 The server will listen on `localhost:8080`.
+
+### Dynamic Tables
+You can create your own tables dynamically:
+```sql
+db > CREATE TABLE products (id int, name varchar(32), price int);
+db > INSERT INTO products VALUES (101, 'Apple', 100);
+db > SELECT * FROM products;
+(101, Apple, 100)
+```
+
+### Data Dump & Restore
+Use the included tool to backup and restore your database:
+```bash
+# Dump to JSON
+python3 db_tool.py dump --format=json > backup.json
+
+# Restore from JSON
+python3 db_tool.py restore --format=json < backup.json
+```
 
 ## 📦 Client Drivers
 

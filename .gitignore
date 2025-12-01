@@ -1,0 +1,8 @@
+db
+obj/
+*.o
+*.db
+__pycache__/
+*.pyc
+*.dSYM/
+.DS_Store

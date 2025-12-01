@@ -97,7 +97,7 @@ void run_server(const char *filename) {
 
       // Handle Meta Commands
       if (input_buffer->buffer[0] == '.') {
-        switch (do_meta_command(input_buffer, table)) {
+        switch (do_meta_command(input_buffer, table, new_socket)) {
         case META_COMMAND_SUCCESS:
           // .exit means disconnect client, not shutdown server
           if (strcmp(input_buffer->buffer, ".exit") == 0) {
